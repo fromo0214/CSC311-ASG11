@@ -4,10 +4,12 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.HashMap;
 //import java.util.ArrayList;
 //import java.util.HashMap;
 import java.util.HashSet;
 //import java.util.List;
+import java.util.List;
 
 import org.jsoup.select.Elements;
 
@@ -78,7 +80,8 @@ public class JedisIndex {
 	 */
 	public Set<String> getURLs(String term) {
         // FILL THIS IN!
-		return null;
+		Set<String> set = jedis.smembers(urlSetKey(term));
+		return set;
 	}
 
     /**
@@ -89,7 +92,15 @@ public class JedisIndex {
 	 */
 	public Map<String, Integer> getCounts(String term) {
         // FILL THIS IN!
-		return null;
+		Map<String, Integer> map = new HashMap<String, Integer>();
+		Set<String> urls = getURLs(term);
+		for(String url: urls)
+		{
+			Integer count = getCount(url, term);
+			map.put(url, count);
+		}
+		return map;
+		
 	}
 
     /**
@@ -101,7 +112,9 @@ public class JedisIndex {
 	 */
 	public Integer getCount(String url, String term) {
         // FILL THIS IN!
-		return null;
+		String redisKey = termCounterKey(url);
+		String count = jedis.hget(redisKey, term);
+		return new Integer(count);
 	}
 
 	/**
@@ -112,6 +125,30 @@ public class JedisIndex {
 	 */
 	public void indexPage(String url, Elements paragraphs) {
 		// TODO: FILL THIS IN!
+		System.out.println("Indexing: " + url);
+
+		TermCounter tc = new TermCounter(url);
+		tc.processElements(paragraphs);
+
+		pushTermCounterToRedis(tc);
+	}
+
+	public List<Object> pushTermCounterToRedis(TermCounter tc) {
+		Transaction t = jedis.multi();
+
+		String url = tc.getLabel();
+		String hashname = termCounterKey(url);
+
+		t.del(hashname);
+
+		for(String term: tc.keySet())
+		{
+			Integer count = tc.get(term);
+			t.hset(hashname, term, count.toString());
+			t.sadd(urlSetKey(term), url);
+		}
+		List<Object> res = t.exec();
+		return res;
 	}
 
 	/**
